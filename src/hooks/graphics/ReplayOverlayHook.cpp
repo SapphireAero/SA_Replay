@@ -256,6 +256,13 @@ bool EnsureReplayOverlayStarted() noexcept
 
 ReplayOverlayStatus GetReplayOverlayStatus() noexcept { return g_Status.load(); }
 
+bool HasReplayOverlayPresenter() noexcept
+{
+    // D3D9 Present 只记录诊断，真正的绘制入口是 EndScene。
+    return g_GlFrames.load(std::memory_order_relaxed) != 0 ||
+        g_EndScenes.load(std::memory_order_relaxed) != 0;
+}
+
 ReplayOverlayDiagnostics GetReplayOverlayDiagnostics() noexcept
 {
     return {g_Backend.load(), g_Status.load(), g_Swaps.load(), g_GlFrames.load(),

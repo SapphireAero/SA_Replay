@@ -5,9 +5,16 @@
 
 namespace rareplay::ui::detail
 {
-void DrawFpsCard(const viewer::ReplayViewSnapshot& snapshot)
+void DrawFpsCard(const viewer::ReplayViewSnapshot& snapshot, bool paused)
 {
-    ImGui::TextUnformatted("录制帧率");
+    if (paused)
+        ImGui::TextUnformatted("实际播放 0.00×");
+    else if (snapshot.mActualPlaybackRate)
+        ImGui::Text("实际播放 %.2f×", *snapshot.mActualPlaybackRate);
+    else
+        ImGui::TextDisabled("实际播放 %s", snapshot.mSeekTarget ? "定位中" : "测量中");
+    if (snapshot.mSeekTarget)
+        ImGui::TextDisabled("定位到第 %u 帧", *snapshot.mSeekTarget + 1);
     if (snapshot.mIsPreview)
     {
         ImGui::TextColored(ImVec4(0.96f, 0.71f, 0.35f, 1.0f), "布局预览 · 示例数据");
@@ -15,7 +22,6 @@ void DrawFpsCard(const viewer::ReplayViewSnapshot& snapshot)
     if (snapshot.mRecordedFps.empty())
     {
         ImGui::TextDisabled("录制 FPS：无数据");
-        ImGui::Dummy(ImVec2(0.0f, 45.0f));
     }
     else
     {

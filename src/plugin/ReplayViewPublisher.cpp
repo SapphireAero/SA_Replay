@@ -22,7 +22,11 @@ void ReplayViewPublisher::Begin(std::string replayName, int recordedLocalHouseIn
     viewer::GetReplayViewExchange().Clear();
 }
 
-void ReplayViewPublisher::Publish(std::optional<int> playbackSpeedSetting, bool canChangeSpeed)
+void ReplayViewPublisher::Publish(std::optional<int> playbackSpeedSetting, bool canChangeSpeed,
+    std::uint32_t totalFrames, std::optional<std::uint32_t> seekTarget, int playbackRate,
+    std::optional<double> actualRate, bool canPause,
+    std::uint32_t completedFrames, const viewer::ReplayCommandCounts& commands,
+    const game_api::ReplayPlayerIdentities& identities)
 {
     const auto now = std::chrono::steady_clock::now();
     if (mSessionId == 0 || now < mNextSample)
@@ -34,7 +38,19 @@ void ReplayViewPublisher::Publish(std::optional<int> playbackSpeedSetting, bool 
     snapshot->mReplayName = mReplayName;
     snapshot->mRecordedLocalHouseIndex = mRecordedLocalHouseIndex;
     snapshot->mCanChangePlaybackSpeed = canChangeSpeed;
-    mWorldReader.Read(*snapshot);
+    if (totalFrames != 0)
+        snapshot->mTotalFrames = totalFrames;
+    snapshot->mSeekTarget = seekTarget;
+    snapshot->mPlaybackRate = playbackRate;
+    snapshot->mActualPlaybackRate = actualRate;
+    snapshot->mCanPause = canPause;
+    snapshot->mCompletedFrames = completedFrames;
+    mWorldReader.Read(*snapshot, identities);
+    for (auto& player : snapshot->mPlayers)
+    {
+        if (player.mHouseIndex >= 0 && static_cast<std::size_t>(player.mHouseIndex) < commands.size())
+            player.mCommands = commands[player.mHouseIndex];
+    }
     const auto& iconStats = mWorldReader.GetIconStats();
     const std::uint32_t iconAttempts = iconStats.mPcx + iconStats.mShp + iconStats.mMissing;
     if (iconAttempts > mIconLogCount && mIconLogCount < 12)
@@ -49,9 +65,11 @@ void ReplayViewPublisher::Publish(std::optional<int> playbackSpeedSetting, bool 
     if (snapshot->mNativeUiLayout && !mHasLoggedLayout)
     {
         const auto& layout = *snapshot->mNativeUiLayout;
-        char message[160]{};
-        std::snprintf(message, sizeof(message), "Replay HUD layout: canvas=%dx%d nativeContentTop=%d",
-            layout.mCanvasWidth, layout.mCanvasHeight, layout.mSidebarContentTop);
+        char message[230]{};
+        std::snprintf(message, sizeof(message), "Replay HUD layout: canvas=%dx%d footer=(%d,%d)-(%d,%d) sidebar=(%d,%d)-(%d,%d)",
+            layout.mCanvasWidth, layout.mCanvasHeight,
+            layout.mFooter.mLeft, layout.mFooter.mTop, layout.mFooter.mRight, layout.mFooter.mBottom,
+            layout.mSidebar.mLeft, layout.mSidebar.mTop, layout.mSidebar.mRight, layout.mSidebar.mBottom);
         Log(message);
         mHasLoggedLayout = true;
     }

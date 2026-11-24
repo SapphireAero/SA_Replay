@@ -17,18 +17,21 @@ int main()
 {
     try
     {
-        using rareplay::ui::GetSidebarPanelTop;
+        using rareplay::ui::GetReplayHudRegions;
         using rareplay::viewer::NativeUiLayout;
-        const auto native = GetSidebarPanelTop(NativeUiLayout{1600, 900, 235}, 1600, 900, {});
-        Require(native && std::abs(*native - 235.0f) < 0.01f, "Native-size radar clearance");
-        const auto scaled = GetSidebarPanelTop(NativeUiLayout{1024, 768, 220}, 1920, 1080, {});
-        Require(scaled && *scaled >= 220.0f * 1080.0f / 768.0f, "Stretched radar bottom is protected");
-        const auto letterboxed = GetSidebarPanelTop(NativeUiLayout{1920, 1080, 220}, 1024, 768, {});
-        Require(letterboxed && *letterboxed >= 96.0f + 220.0f * 1024.0f / 1920.0f, "Top letterbox offset is protected");
-        const auto viewport = GetSidebarPanelTop(NativeUiLayout{1920, 1080, 220}, 1024, 768, {0, 100, 1024, 668});
-        Require(viewport && *viewport >= 100.0f + 220.0f * 568.0f / 1080.0f, "Live viewport offset is protected");
-        Require(!GetSidebarPanelTop(std::nullopt, 1024, 768, {}), "Unknown layout cannot authorize covering radar");
-        Require(!GetSidebarPanelTop(NativeUiLayout{1024, 0, 220}, 1024, 768, {}), "Invalid canvas rejected");
+        const NativeUiLayout layout{2560, 1440, {0, 1408, 2392, 1440}, {2392, 250, 2560, 1440}};
+        const auto native = GetReplayHudRegions(layout, 2560, 1440, {});
+        Require(native.mFooter.mTop == 1408 && native.mFooter.mRight == 2392, "Stay inside the native footer");
+        Require(native.mSidebar.mLeft == 2392 && native.mSidebar.mTop == 250, "Protect the battlefield and radar");
+        const auto scaled = GetReplayHudRegions(layout, 1280, 720, {});
+        Require(scaled.mFooter.mTop == 704 && scaled.mSidebar.mLeft == 1196, "Scale both axes");
+        const auto viewport = GetReplayHudRegions(layout, 1280, 800, {0, 40, 1280, 760});
+        Require(viewport.mFooter.mTop == 744 && viewport.mSidebar.mBottom == 760, "Map the actual letterboxed viewport");
+        const auto ambiguous = GetReplayHudRegions(layout, 1280, 800, {});
+        Require(ambiguous.mFooter.mTop >= ambiguous.mFooter.mBottom && ambiguous.mSidebar.mTop == 165,
+                "Avoid map overlap when letterboxing is ambiguous");
+        const auto unknown = GetReplayHudRegions(std::nullopt, 1280, 800, {});
+        Require(unknown.mFooter.mBottom == 0 && unknown.mSidebar.mRight == 0, "Unknown layout has no authorized region");
         std::cout << "Replay HUD layout tests passed\n";
         return 0;
     }

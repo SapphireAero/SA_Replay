@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Resolve the game's existing Blowfish class beside gamemd.exe. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity name="RAReplay.Blowfish" version="1.0.0.0" processorArchitecture="x86" type="win32"/>
+  <file name="blowfish.dll">
+    <comClass clsid="{1440AD10-6AA8-11D1-B6F9-00A024DDAFD1}"/>
+  </file>
+</assembly>

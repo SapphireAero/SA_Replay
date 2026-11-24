@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>SA_Replay</AssemblyName>
+    <Product>SA_Replay</Product>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>7.3</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RAReplay.Client/RAReplay.Client.csproj" />
+    <None Update="gamemd.exe.manifest" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

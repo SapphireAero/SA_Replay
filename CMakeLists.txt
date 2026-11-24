@@ -112,6 +112,8 @@ add_library(RAReplayPlugin SHARED
     src/plugin/Entry.cpp
     src/plugin/ReplayConfig.cpp
     src/plugin/ReplayRuntime.cpp
+    src/plugin/ReplayTimeline.cpp
+    src/plugin/ReplayBattleReport.cpp
     src/plugin/ReplayViewPublisher.cpp
     src/plugin/OverlayDiagnosticsReporter.cpp
     src/plugin/Diagnostics.cpp

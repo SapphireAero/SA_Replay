@@ -239,6 +239,8 @@ bool ReplayOverlayRenderer::Render(HDC drawDc, viewer::ReplayViewExchange& excha
             mHud.Reset();
             mVisible = true;
         }
+        ImGui_ImplWin32_NewFrame();
+        RefreshOverlayMousePosition(window);
         ProcessInput(window, true);
         if (!mVisible)
         {
@@ -248,8 +250,6 @@ bool ReplayOverlayRenderer::Render(HDC drawDc, viewer::ReplayViewExchange& excha
         }
 
         ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        RefreshOverlayMousePosition(window);
         const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         ui::UiRect gameContentRect;
         const double viewportRight = static_cast<double>(sourceViewport[0]) + sourceViewport[2];

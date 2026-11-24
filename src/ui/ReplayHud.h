@@ -23,7 +23,7 @@ struct UiRect
     float mBottom = 0.0f;
 };
 
-enum class ReplayPanel { Production, Units, Groups };
+enum class ReplayPanel { Statistics, Production, Units, Groups };
 
 /**
  * 只读回放快照的 ImGui 表示层。宿主拥有实例、纹理和 ImGui 帧生命周期；仅在渲染线程调用。
@@ -59,8 +59,9 @@ private:
     IconResolver mIconResolver;
     std::vector<UiRect> mInputRegions;
     std::vector<UiRect> mVisibleRegions;
-    ReplayPanel mSelectedPanel = ReplayPanel::Production;
+    ReplayPanel mSelectedPanel = ReplayPanel::Statistics;
     bool mSelectPanelPending = false;
+    std::optional<std::uint32_t> mTimelineDragFrame;
     UiRect mGameContentRect;
 };
 }

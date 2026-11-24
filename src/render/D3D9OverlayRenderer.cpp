@@ -234,6 +234,8 @@ bool D3D9OverlayRenderer::Render(IDirect3DDevice9* device,
             mHud.Reset();
             mVisible = true;
         }
+        ImGui_ImplWin32_NewFrame();
+        RefreshOverlayMousePosition(target.mWindow);
         ProcessOverlayInput(mInputQueue, target.mWindow, true, mVisible);
         if (!mVisible)
         {
@@ -249,8 +251,6 @@ bool D3D9OverlayRenderer::Render(IDirect3DDevice9* device,
             SetFailure(FailureReason::Initialization);
             return false;
         }
-        ImGui_ImplWin32_NewFrame();
-        RefreshOverlayMousePosition(target.mWindow);
         ImGuiIO& io = ImGui::GetIO();
         const float scaleX = static_cast<float>(target.mBackBufferWidth) /
                              static_cast<float>(target.mClientWidth);

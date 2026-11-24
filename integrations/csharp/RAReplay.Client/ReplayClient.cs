@@ -35,7 +35,7 @@ namespace RAReplay.Client
             ReplayArchive archive = ReplayArchive.Open(replayPath);
             if (!archive.HasPlayerInputEffects)
                 throw new InvalidDataException("旧格式缺少玩家输入效果，请重新录制。");
-            archive.ValidatePayload();
+            uint frameCount = archive.ValidatePayloadAndCountFrames();
             if (!archive.MatchesCurrentHeader())
                 throw new InvalidDataException("回放文件在校验后发生变化。");
             if (!ReplayLaunchManifest.EqualsHash(
@@ -50,7 +50,7 @@ namespace RAReplay.Client
                     ReplayLaunchManifest.HashFile(fullMap), archive.Manifest.BaseMapHash))
                 throw new InvalidDataException("回放地图不在游戏目录内或内容不匹配。");
 
-            return PlaybackSession.Prepare(root, archive);
+            return PlaybackSession.Prepare(root, archive, frameCount);
         }
 
         private static bool IsSafeChild(string root, string fullPath)

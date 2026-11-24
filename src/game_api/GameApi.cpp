@@ -7,10 +7,12 @@ using byte = unsigned char;
 
 #include <EventClass.h>
 #include <Fundamentals.h>
+#include <GScreenClass.h>
 #include <HouseClass.h>
 #include <ScenarioClass.h>
 #include <SessionClass.h>
 #include <Unsorted.h>
+#include <WWMouseClass.h>
 
 #include <bit>
 #include <cstring>
@@ -21,12 +23,48 @@ namespace
 {
 static_assert(sizeof(EventClass) == 111);
 static_assert(offsetof(EventClass, Frame) == 3);
+
+// Same command classes as the offline ReplayDetails counter.
+bool IsReplayGameCommand(EventType type)
+{
+    switch (type)
+    {
+    case EventType::PowerOn:
+    case EventType::PowerOff:
+    case EventType::Ally:
+    case EventType::MegaMission:
+    case EventType::MegaMissionF:
+    case EventType::Idle:
+    case EventType::Scatter:
+    case EventType::Deploy:
+    case EventType::Detonate:
+    case EventType::Place:
+    case EventType::Produce:
+    case EventType::Suspend:
+    case EventType::Abandon:
+    case EventType::Primary:
+    case EventType::SpecialPlace:
+    case EventType::Repair:
+    case EventType::Sell:
+    case EventType::SellCell:
+    case EventType::AbandonAll:
+        return true;
+    default:
+        return false;
+    }
+}
 }
 
 bool GameApi::IsWorldReady() const
 {
     return Game::IsActive && ScenarioClass::Instance && HouseClass::CurrentPlayer &&
         native::IsWorldReady();
+}
+
+void GameApi::RenderPausedPlayback() const
+{
+    if (Game::hWnd && !IsIconic(Game::hWnd) && DSurface::Hidden && WWMouseClass::Instance)
+        GScreenClass::Instance.Render();
 }
 
 bool GameApi::ReadSessionInfo(replay::ReplaySessionInfo& outInfo, std::string& error)
@@ -193,6 +231,12 @@ bool GameApi::ExecuteReplayFrame(const replay::ReplayFrame& frame, std::string& 
         return false;
     }
     native::ProcessPostFrameEvents();
+    for (const auto& bytes : frame.mEvents)
+    {
+        const auto house = bytes[2];
+        if (house < mPlaybackCommands.size() && IsReplayGameCommand(static_cast<EventType>(bytes[0])))
+            ++mPlaybackCommands[house];
+    }
     error.clear();
     return true;
 }
@@ -249,6 +293,12 @@ bool GameApi::TryGetViewerPlaybackSpeed(int& outSetting) const noexcept
 bool GameApi::CanControlViewerPlaybackSpeed() const noexcept
 {
     return SessionClass::Instance.GameMode == GameMode::Skirmish;
+}
+
+bool GameApi::IsNetworkGame() const noexcept
+{
+    const auto mode = SessionClass::Instance.GameMode;
+    return mode == GameMode::LAN || mode == GameMode::Internet;
 }
 
 void GameApi::BeforeNativeEventExecution()

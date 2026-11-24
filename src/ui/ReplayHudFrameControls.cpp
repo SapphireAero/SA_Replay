@@ -3,66 +3,130 @@
 #include "../viewer/ReplayViewExchange.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 
 namespace rareplay::ui::detail
 {
 void DrawFrameControls(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayViewExchange& exchange,
-                       std::vector<UiRect>& inputRegions)
+                       std::optional<std::uint32_t>& dragFrame)
 {
-    constexpr const char* SPEED_LABELS[] = {
-        "最快", "很快", "快", "正常", "慢", "很慢", "最慢"};
-    const float availableWidth = ImGui::GetContentRegionAvail().x;
-    const bool compact = availableWidth < 730.0f;
-
-    if (snapshot.mTotalFrames && *snapshot.mTotalFrames > 0)
+    constexpr const char* speedLabels[] = {"最快", "很快", "快", "正常", "慢", "很慢", "最慢"};
+    constexpr const char* rateLabels[] = {"1×", "2×", "4×", "8×", "16×"};
+    constexpr int rates[] = {1, 2, 4, 8, 16};
+    const bool canSeek = snapshot.mActive && !snapshot.mIsPreview && snapshot.mTotalFrames.value_or(0) > 1;
+    const bool canPause = snapshot.mActive && !snapshot.mIsPreview && snapshot.mCanPause;
+    const float height = ImGui::GetFrameHeight();
+    const auto& style = ImGui::GetStyle();
+    const auto buttonWidth = [&style](const char* label)
     {
-        const float progress = std::clamp(static_cast<float>(snapshot.mFrameNumber) /
-                                          static_cast<float>(*snapshot.mTotalFrames), 0.0f, 1.0f);
-        ImGui::Text("帧 %u / %u", snapshot.mFrameNumber, *snapshot.mTotalFrames);
-        if (!compact)
+        return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2 + style.ItemSpacing.x;
+    };
+    float controlsWidth = canPause ? buttonWidth("继续") : 0.0f;
+    if (canSeek)
+        for (const auto* label : rateLabels)
+            controlsWidth += buttonWidth(label);
+    const bool compactRates = canSeek && ImGui::GetContentRegionAvail().x - controlsWidth < 100.0f;
+    if (compactRates)
+        controlsWidth = buttonWidth("16×") + (canPause ? buttonWidth("继续") : 0.0f);
+    if (!canSeek && snapshot.mActive && snapshot.mCanChangePlaybackSpeed)
+        controlsWidth += buttonWidth("很快");
+
+    const float timelineWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - controlsWidth);
+    const std::uint32_t total = snapshot.mTotalFrames.value_or(0);
+    if (total > 0)
+    {
+        const auto last = total - 1;
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const ImVec2 end(start.x + timelineWidth, start.y + height);
+        const float firstX = start.x + std::min(5.0f, timelineWidth * 0.5f);
+        const float lastX = end.x - std::min(5.0f, timelineWidth * 0.5f);
+        const bool interactive = canSeek && lastX > firstX;
+        if (interactive)
+        {
+            ImGui::InvisibleButton("##ReplayTimeline", ImVec2(timelineWidth, height));
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            const bool validMouse = ImGui::IsMousePosValid(&mouse);
+            const bool released = dragFrame.has_value() && ImGui::IsItemDeactivated() &&
+                ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+            if (validMouse && (ImGui::IsItemActive() || released))
+            {
+                const double position = std::clamp<double>((mouse.x - firstX) / (lastX - firstX), 0.0, 1.0);
+                dragFrame = static_cast<std::uint32_t>(std::llround(position * last));
+                if (released)
+                    exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::Seek, static_cast<int>(*dragFrame)});
+            }
+        }
+        else
+            ImGui::Dummy(ImVec2(timelineWidth, height));
+
+        const auto completed = snapshot.mCompletedFrames == 0 ? 0 : snapshot.mCompletedFrames - 1;
+        const auto selected = std::min(dragFrame.value_or(snapshot.mSeekTarget.value_or(completed)), last);
+        const auto cursorX = firstX + (lastX - firstX) * (last ? static_cast<float>(selected) / last : 0.0f);
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(start, end, ImGui::GetColorU32(ImGuiCol_FrameBg));
+        draw->AddRectFilled(start, ImVec2(cursorX, end.y), IM_COL32(91, 78, 46, 255));
+        if (interactive)
+            draw->AddLine(ImVec2(cursorX, start.y), ImVec2(cursorX, end.y), IM_COL32(238, 192, 94, 255), 2.0f);
+        char text[80];
+        std::snprintf(text, sizeof(text), "%s%u / %u 帧", dragFrame || snapshot.mSeekTarget ? "定位 " : "",
+                      selected + 1, total);
+        const auto labelWidth = ImGui::CalcTextSize(text).x;
+        if (labelWidth + 8.0f < timelineWidth)
+        {
+            const ImVec4 clip(start.x, start.y, end.x, end.y);
+            draw->AddText(nullptr, 0.0f, ImVec2(start.x + (timelineWidth - labelWidth) * 0.5f, start.y),
+                          ImGui::GetColorU32(ImGuiCol_Text), text, nullptr, 0.0f, &clip);
+        }
+        if (!interactive || !ImGui::IsItemActive())
+            dragFrame.reset();
+    }
+    else
+    {
+        dragFrame.reset();
+        ImGui::Text("当前帧 %u", snapshot.mFrameNumber);
+    }
+
+    if (canSeek)
+    {
+        int selectedRate = 0;
+        for (int i = 0; i < 5; ++i)
+            if (rates[i] == snapshot.mPlaybackRate)
+                selectedRate = i;
+        if (compactRates)
         {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(std::max(100.0f, availableWidth - 420.0f));
-            ImGui::ProgressBar(progress, ImVec2(std::max(100.0f, availableWidth - 420.0f), 12.0f), "");
+            if (ImGui::Button(rateLabels[selectedRate]))
+                exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::SetPlaybackRate,
+                                 rates[(selectedRate + 1) % 5]});
         }
-    }
-    else
-    {
-        ImGui::Text("当前帧 %u · 总帧未知", snapshot.mFrameNumber);
-    }
-
-    ImGui::SameLine();
-    const int speed = snapshot.mPlaybackSpeedSetting;
-    const char* currentLabel = speed >= 0 && speed <= 6 ? SPEED_LABELS[speed] : "未知";
-    if (snapshot.mCanChangePlaybackSpeed && snapshot.mActive)
-    {
-        ImGui::SetNextItemWidth(compact ? 150.0f : 160.0f);
-        if (ImGui::BeginCombo("##播放速度", currentLabel))
+        else
         {
-            for (int setting = 0; setting <= 6; ++setting)
+            for (int i = 0; i < 5; ++i)
             {
-                if (ImGui::Selectable(SPEED_LABELS[setting], speed == setting))
-                {
-                    exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::SetPlaybackSpeed, setting});
-                }
+                ImGui::SameLine();
+                if (i == selectedRate)
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                if (ImGui::Button(rateLabels[i]))
+                    exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::SetPlaybackRate, rates[i]});
+                if (i == selectedRate)
+                    ImGui::PopStyleColor();
             }
-            const ImVec2 popupPosition = ImGui::GetWindowPos();
-            const ImVec2 popupSize = ImGui::GetWindowSize();
-            inputRegions.push_back({popupPosition.x, popupPosition.y,
-                                    popupPosition.x + popupSize.x, popupPosition.y + popupSize.y});
-            ImGui::EndCombo();
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("速度");
     }
-    else
+    else if (snapshot.mActive && snapshot.mCanChangePlaybackSpeed)
     {
-        ImGui::TextDisabled("速度 %s · 不可调", currentLabel);
-    }
-    if (ImGui::GetContentRegionAvail().x > 85.0f)
-    {
+        const int speed = std::clamp(snapshot.mPlaybackSpeedSetting, 0, 6);
         ImGui::SameLine();
-        ImGui::TextDisabled("F10 隐藏");
+        if (ImGui::Button(speedLabels[speed]))
+            exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::SetPlaybackSpeed, (speed + 1) % 7});
+    }
+    if (canPause)
+    {
+        const bool pauseRequested = exchange.ReadPauseState() != viewer::PlaybackPauseState::Running;
+        ImGui::SameLine();
+        if (ImGui::Button(pauseRequested ? "继续###ReplayPause" : "暂停###ReplayPause"))
+            exchange.Submit({snapshot.mSessionId, viewer::ViewerCommandKind::SetPaused, pauseRequested ? 0 : 1});
     }
 }
 }

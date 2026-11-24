@@ -186,10 +186,12 @@ ReplayReadResult FrameCodec::ReadFrame(std::istream& stream, ReplayFrame& outFra
     frame.mChecksum = LoadU32(bytes.data() + 4);
     frame.mHasChecksum = (flags & CHECKSUM_PRESENT) != 0;
     frame.mEvents.resize(eventCount);
-    for (auto& event : frame.mEvents)
+    if (eventCount != 0)
     {
-        stream.read(reinterpret_cast<char*>(event.data()), event.size());
-        if (stream.gcount() != static_cast<std::streamsize>(event.size()))
+        static_assert(sizeof(RecordedEvent) == EVENT_BYTES);
+        const auto eventBytes = static_cast<std::streamsize>(eventCount) * EVENT_BYTES;
+        stream.read(reinterpret_cast<char*>(frame.mEvents.data()), eventBytes);
+        if (stream.gcount() != eventBytes)
         {
             error = "Truncated replay event";
             return ReplayReadResult::Error;

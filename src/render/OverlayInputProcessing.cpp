@@ -5,6 +5,7 @@
 
 #include <windowsx.h>
 
+#include <cfloat>
 #include <cstdint>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message,
@@ -51,6 +52,7 @@ void ProcessOverlayInput(OverlayInputQueue& inputQueue, HWND window,
     if (inputQueue.ConsumeFocusReset())
     {
         io.AddFocusEvent(false);
+        io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
         for (int button = 0; button < 5; ++button)
         {
             io.AddMouseButtonEvent(button, false);

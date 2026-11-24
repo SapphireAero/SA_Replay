@@ -37,8 +37,7 @@ void DrawPlayerRow(const viewer::PlayerSummary& player, bool isSelected, int& se
 
     const char* playerName = player.mName.empty() ? "未命名玩家" : player.mName.c_str();
     char title[256];
-    std::snprintf(title, sizeof(title), "%s  %s%s", playerName,
-                  player.mIsHuman ? "玩家" : "AI", player.mDefeated ? " · 已战败" : "");
+    std::snprintf(title, sizeof(title), "%s%s", playerName, player.mDefeated ? " · 已战败" : "");
     const ImVec4 titleClip(rowStart.x + 26.0f, rowStart.y + 4.0f,
                             rowEnd.x - 5.0f, rowStart.y + 24.0f);
     const ImVec4 bodyClip(rowStart.x + 9.0f, rowStart.y + 24.0f,
@@ -95,8 +94,6 @@ void DrawPlayerRow(const viewer::PlayerSummary& player, bool isSelected, int& se
                       hasOutage ? IM_COL32(241, 129, 106, 255) : IM_COL32(176, 198, 176, 255),
                       power, nullptr, 0.0f, &bodyClip);
 
-    ImGui::SetItemTooltip("%s · 阵营：%s", playerName,
-                          player.mFaction.empty() ? "未知" : player.mFaction.c_str());
     ImGui::PopID();
 }
 }
@@ -117,5 +114,86 @@ void DrawPlayerList(const viewer::ReplayViewSnapshot& snapshot, int& selectedHou
         }
     }
     ImGui::EndChild();
+}
+
+void DrawPlayerStatistics(const viewer::PlayerSummary* player, std::uint32_t completedFrames)
+{
+    if (!player || !player->mBattleNumbers)
+    {
+        ImGui::TextDisabled("暂无对局统计");
+        return;
+    }
+
+    const auto& numbers = *player->mBattleNumbers;
+    const char* outcome = (numbers.mFlags & viewer::Winner) ? "获胜" :
+        (numbers.mFlags & (viewer::Defeated | viewer::Loser)) ? "已战败" : "作战中";
+    ImGui::TextWrapped("%s · %s", player->mName.c_str(), outcome);
+    if (!player->mFaction.empty())
+        ImGui::TextWrapped("%s", player->mFaction.c_str());
+    ImGui::TextDisabled("进度 %.2f 游戏分钟", completedFrames / 3600.0);
+    if (player->mCommands && completedFrames)
+    {
+        const auto count = *player->mCommands;
+        ImGui::TextWrapped("指令 %u · %.1f / 游戏分钟", count, count * 3600.0 / completedFrames);
+    }
+
+    constexpr auto flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame;
+    ImGui::Spacing();
+    ImGui::TextUnformatted("战斗");
+    if (ImGui::BeginTable("##BattleSummary", 4, flags))
+    {
+        ImGui::TableSetupColumn("项目");
+        ImGui::TableSetupColumn("单位");
+        ImGui::TableSetupColumn("建筑");
+        ImGui::TableSetupColumn("合计");
+        ImGui::TableHeadersRow();
+        const auto row = [](const char* title, int units, int buildings)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(title);
+            for (const int value : {units, buildings, units < 0 || buildings < 0 ? -1 : units + buildings})
+            {
+                ImGui::TableNextColumn();
+                if (value < 0) ImGui::TextDisabled("—");
+                else ImGui::Text("%d", value);
+            }
+        };
+        row("击杀", numbers.mUnitKills, numbers.mBuildingKills);
+        row("战损", numbers.mUnitLosses, numbers.mBuildingLosses);
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("生产与存量");
+    if (ImGui::BeginTable("##ProductionSummary", 3, flags))
+    {
+        ImGui::TableSetupColumn("类别");
+        ImGui::TableSetupColumn("生产");
+        ImGui::TableSetupColumn("持有");
+        ImGui::TableHeadersRow();
+        const auto row = [](const char* title, int produced, int owned)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(title);
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", produced);
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", owned);
+        };
+        row("步兵", numbers.mProduced.mInfantry, numbers.mOwned.mInfantry);
+        row("载具", numbers.mProduced.mVehicles, numbers.mOwned.mVehicles);
+        row("飞机", numbers.mProduced.mAircraft, numbers.mOwned.mAircraft);
+        row("建筑", numbers.mProduced.mBuildings, numbers.mOwned.mBuildings);
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("经济");
+    ImGui::Text("采矿收入 %d", numbers.mHarvested);
+    ImGui::Text("累计支出 %d", numbers.mSpent);
+    ImGui::Text("剩余资金 %d", numbers.mCash);
+    ImGui::TextWrapped("电力产出 / 消耗  %d / %d", numbers.mPowerOutput, numbers.mPowerDrain);
 }
 }

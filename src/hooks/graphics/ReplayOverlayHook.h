@@ -35,6 +35,9 @@ struct ReplayOverlayDiagnostics
  */
 bool EnsureReplayOverlayStarted() noexcept;
 
+/** 已观察到能绘制覆盖层的游戏画面，游戏线程可以开始采集 HUD 数据。 */
+bool HasReplayOverlayPresenter() noexcept;
+
 /** 供宿主诊断当前覆盖层状态；不会初始化或改变图形状态。 */
 ReplayOverlayStatus GetReplayOverlayStatus() noexcept;
 ReplayOverlayDiagnostics GetReplayOverlayDiagnostics() noexcept;

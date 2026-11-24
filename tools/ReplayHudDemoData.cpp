@@ -136,6 +136,7 @@ std::shared_ptr<viewer::ReplayViewSnapshot> CreateReplayHudDemoSnapshot(const Re
     snapshot->mStartedUtc = 1'767'226'800;
     snapshot->mWasNetworkGame = true;
     snapshot->mFrameNumber = 28'540;
+    snapshot->mCompletedFrames = snapshot->mFrameNumber + 1;
     snapshot->mTotalFrames = 64'800;
     snapshot->mRecordedLocalHouseIndex = 1;
     snapshot->mPlaybackSpeedSetting = 1;
@@ -143,7 +144,9 @@ std::shared_ptr<viewer::ReplayViewSnapshot> CreateReplayHudDemoSnapshot(const Re
     snapshot->mHasPlayerVision = false;
     snapshot->mHasRecordedGroups = true;
     // 示例游戏画布及原生雷达下方建造区起点，不是假装从运行中游戏取得的数据。
-    snapshot->mNativeUiLayout = viewer::NativeUiLayout{1600, 900, 235};
+    snapshot->mNativeUiLayout = viewer::NativeUiLayout{1600, 900,
+        {0, 868, 1432, 900}, {1432, 235, 1600, 900}};
+    snapshot->mActualPlaybackRate = 3.83;
 
     viewer::PlayerSummary localPlayer;
     localPlayer.mHouseIndex = 1;

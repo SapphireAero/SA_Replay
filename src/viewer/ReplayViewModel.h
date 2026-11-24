@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -40,6 +41,34 @@ struct ProductionLine
     std::uint32_t mQueuedCount = 0;
 };
 
+struct BattleUnitCounts
+{
+    std::int32_t mInfantry = 0;
+    std::int32_t mVehicles = 0;
+    std::int32_t mAircraft = 0;
+    std::int32_t mBuildings = 0;
+};
+
+enum BattlePlayerFlag : std::uint32_t { Human = 1, Defeated = 2, Winner = 4, Loser = 8 };
+
+struct PlayerBattleNumbers
+{
+    std::int32_t mUnitKills = 0;
+    std::int32_t mBuildingKills = 0;
+    std::int32_t mUnitLosses = -1;
+    std::int32_t mBuildingLosses = -1;
+    BattleUnitCounts mProduced;
+    BattleUnitCounts mOwned;
+    std::int32_t mHarvested = 0;
+    std::int32_t mSpent = 0;
+    std::int32_t mCash = 0;
+    std::int32_t mPowerOutput = 0;
+    std::int32_t mPowerDrain = 0;
+    std::uint32_t mFlags = 0;
+};
+
+using ReplayCommandCounts = std::array<std::uint32_t, 64>;
+
 struct PlayerSummary
 {
     int mHouseIndex = -1;
@@ -51,6 +80,8 @@ struct PlayerSummary
     std::optional<std::int64_t> mCredits;
     std::optional<int> mPowerOutput;
     std::optional<int> mPowerDrain;
+    std::optional<PlayerBattleNumbers> mBattleNumbers;
+    std::optional<std::uint32_t> mCommands;
     bool mHasProductionData = false;
     bool mHasUnitData = false;
     std::vector<ProductionLine> mProductionLines;
@@ -69,12 +100,21 @@ struct FpsSample
     float mFps = 0.0f;
 };
 
-/** 原生游戏逻辑像素中的侧栏保留区；由游戏线程采样，渲染层负责缩放映射。 */
+struct NativeUiRect
+{
+    int mLeft = 0;
+    int mTop = 0;
+    int mRight = 0;
+    int mBottom = 0;
+};
+
+/** 由游戏线程采样的原生保留区，坐标相对游戏画布。 */
 struct NativeUiLayout
 {
     int mCanvasWidth = 0;
     int mCanvasHeight = 0;
-    int mSidebarContentTop = 0;
+    NativeUiRect mFooter;
+    NativeUiRect mSidebar;
 };
 
 /** 游戏线程发布的只读值快照；缺失数据用 optional/能力标志表示，不能当作零。 */
@@ -89,7 +129,12 @@ struct ReplayViewSnapshot
     std::optional<std::int64_t> mStartedUtc;
     bool mWasNetworkGame = false;
     std::uint32_t mFrameNumber = 0;
+    std::uint32_t mCompletedFrames = 0;
     std::optional<std::uint32_t> mTotalFrames;
+    std::optional<std::uint32_t> mSeekTarget;
+    int mPlaybackRate = 1;
+    std::optional<double> mActualPlaybackRate;
+    bool mCanPause = false;
     int mRecordedLocalHouseIndex = -1;
     int mPlaybackSpeedSetting = 0;
     bool mCanChangePlaybackSpeed = false;
@@ -101,7 +146,7 @@ struct ReplayViewSnapshot
     std::vector<FpsSample> mRecordedFps;
 };
 
-enum class ViewerCommandKind { SetPlaybackSpeed };
+enum class ViewerCommandKind { SetPlaybackSpeed, Seek, SetPlaybackRate, SetPaused };
 struct ViewerCommand
 {
     std::uint64_t mSessionId = 0;

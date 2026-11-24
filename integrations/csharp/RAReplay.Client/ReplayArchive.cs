@@ -15,6 +15,7 @@ namespace RAReplay.Client
         public byte[] GameExeHash { get; private set; }
         public uint StreamVersion { get; private set; }
         public bool HasPlayerInputEffects { get { return StreamVersion >= 2; } }
+        public byte[] GetPayloadHash() { return (byte[])contentHash.Clone(); }
         private byte[] metadataHash;
         private byte[] contentHash;
 
@@ -58,6 +59,17 @@ namespace RAReplay.Client
         // 播放前流式核对 metadata + stream；列表浏览只解析头与清单。
         public void ValidatePayload()
         {
+            ValidatePayloadAndCountFrames();
+        }
+
+        internal uint ValidatePayloadAndCountFrames()
+        {
+            return ReadFrames(null, out _);
+        }
+
+        // 事件类型与所属势力来自已校验的帧流，供战报统计。
+        public uint ReadFrames(Action<byte, int> visitEvent, out int localHouse)
+        {
             ReplayArchive current = Open(Path);
             if (current.StreamBytes != StreamBytes ||
                 !ReplayLaunchManifest.EqualsHash(current.contentHash, contentHash))
@@ -81,7 +93,7 @@ namespace RAReplay.Client
                 if (!ReplayLaunchManifest.EqualsHash(sha.Hash, contentHash))
                     throw new InvalidDataException("回放数据 SHA-256 校验失败。");
             }
-            ValidateFrames();
+            return ValidateFrames(visitEvent, out localHouse);
         }
 
         public bool MatchesCurrentHeader()
@@ -93,7 +105,7 @@ namespace RAReplay.Client
                 ReplayLaunchManifest.EqualsHash(current.GameExeHash, GameExeHash);
         }
 
-        private void ValidateFrames()
+        private uint ValidateFrames(Action<byte, int> visitEvent, out int localHouse)
         {
             using (FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (BinaryReader reader = new BinaryReader(stream, Encoding.UTF8))
@@ -106,7 +118,8 @@ namespace RAReplay.Client
                     (streamVersion != 1 && streamVersion != 2) || reader.ReadUInt32() != 111)
                     throw new InvalidDataException("回放帧流头无效。");
                 reader.ReadUInt32(); // gameMode
-                reader.ReadUInt32(); // localHouseIndex
+                uint recordedHouse = reader.ReadUInt32();
+                localHouse = recordedHouse < 64 ? (int)recordedHouse : -1;
                 if (reader.ReadUInt32() != 0) throw new InvalidDataException("回放起始帧无效。");
                 reader.ReadUInt32(); // frameSendRate
                 reader.ReadUInt32(); // randomSeed
@@ -125,7 +138,19 @@ namespace RAReplay.Client
                         effectCount > 4096 ||
                         stream.Length - stream.Position < count * 111L + effectCount * 40L)
                         throw new InvalidDataException("回放帧顺序、事件数量或标志无效。");
-                    stream.Position += count * 111L;
+                    if (visitEvent == null)
+                        stream.Position += count * 111L;
+                    else
+                    {
+                        for (uint i = 0; i < count; i++)
+                        {
+                            byte type = reader.ReadByte();
+                            reader.ReadByte(); // 已执行标志
+                            int house = reader.ReadSByte();
+                            stream.Position += 108;
+                            if (house >= 0 && house < 64) visitEvent(type, house);
+                        }
+                    }
                     for (uint i = 0; i < effectCount; i++)
                     {
                         uint kind = reader.ReadUInt32();
@@ -143,6 +168,7 @@ namespace RAReplay.Client
                     }
                     expected++;
                 }
+                return expected;
             }
         }
 

@@ -5,6 +5,7 @@
 #include "../viewer/ReplayViewExchange.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace rareplay::ui
@@ -12,16 +13,25 @@ namespace rareplay::ui
 namespace
 {
 constexpr float EDGE_GAP = 14.0f;
-constexpr float PANEL_WIDTH = 324.0f;
 constexpr float FPS_WIDTH = 258.0f;
-constexpr float FPS_HEIGHT = 180.0f;
-constexpr float FOOTER_HEIGHT = 48.0f;
 
 void RecordWindowRegion(std::vector<UiRect>& regions)
 {
     const ImVec2 position = ImGui::GetWindowPos();
     const ImVec2 size = ImGui::GetWindowSize();
     regions.push_back({position.x, position.y, position.x + size.x, position.y + size.y});
+}
+
+UiRect RoundInside(UiRect rect, ImVec2 origin)
+{
+    return {std::ceil(origin.x + rect.mLeft), std::ceil(origin.y + rect.mTop),
+            std::floor(origin.x + rect.mRight), std::floor(origin.y + rect.mBottom)};
+}
+
+void SetNextRegion(const UiRect& rect)
+{
+    ImGui::SetNextWindowPos(ImVec2(rect.mLeft, rect.mTop));
+    ImGui::SetNextWindowSize(ImVec2(rect.mRight - rect.mLeft, rect.mBottom - rect.mTop));
 }
 
 const viewer::PlayerSummary* FindPlayer(const viewer::ReplayViewSnapshot& snapshot, int houseIndex)
@@ -77,9 +87,10 @@ void ReplayHud::Draw(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayV
     {
         mSessionId = snapshot.mSessionId;
         mSelectedHouseIndex = -1;
+        mTimelineDragFrame.reset();
         if (!mSelectPanelPending)
         {
-            mSelectedPanel = ReplayPanel::Production;
+            mSelectedPanel = ReplayPanel::Statistics;
         }
     }
 
@@ -104,29 +115,29 @@ void ReplayHud::Draw(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayV
     const ImGuiWindowFlags fixedFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
 
-    const float panelWidth = std::min(PANEL_WIDTH, std::max(260.0f, extent.x * 0.32f));
-    const float fpsWidth = std::min(FPS_WIDTH, std::max(180.0f, extent.x - panelWidth - EDGE_GAP * 3.0f));
+    const float fpsWidth = std::min(FPS_WIDTH, extent.x - EDGE_GAP * 2.0f);
     ImGui::SetNextWindowPos(ImVec2(origin.x + EDGE_GAP, origin.y + EDGE_GAP));
-    ImGui::SetNextWindowSize(ImVec2(fpsWidth, FPS_HEIGHT));
-    if (ImGui::Begin("录制帧率##ReplayFps", nullptr, fixedFlags | ImGuiWindowFlags_NoInputs))
+    ImGui::SetNextWindowSize(ImVec2(fpsWidth, 0.0f));
+    if (ImGui::Begin("播放状态##ReplayFps", nullptr,
+            fixedFlags | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize))
     {
         RecordWindowRegion(mVisibleRegions);
-        detail::DrawFpsCard(snapshot);
+        detail::DrawFpsCard(snapshot, exchange.ReadPauseState() == viewer::PlaybackPauseState::Paused);
     }
     ImGui::End();
 
-    const auto nativePanelTop = GetSidebarPanelTop(snapshot.mNativeUiLayout, extent.x, extent.y, mGameContentRect);
-    const float panelTop = nativePanelTop.value_or(extent.y) + EDGE_GAP;
-    const float panelHeight = extent.y - FOOTER_HEIGHT - EDGE_GAP * 2.0f - panelTop;
-    // 原生布局尚未就绪或空间不足时不显示侧栏，不能为了显示 HUD 覆盖雷达。
-    if (nativePanelTop && panelHeight >= 120.0f)
+    const auto regions = GetReplayHudRegions(snapshot.mNativeUiLayout, extent.x, extent.y, mGameContentRect);
+    const auto sidebar = RoundInside(regions.mSidebar, origin);
+    const float panelHeight = sidebar.mBottom - sidebar.mTop;
+    if (sidebar.mRight - sidebar.mLeft >= 60.0f && panelHeight >= 100.0f)
     {
-        ImGui::SetNextWindowPos(ImVec2(origin.x + extent.x - panelWidth - EDGE_GAP, origin.y + panelTop));
-        ImGui::SetNextWindowSize(ImVec2(panelWidth, panelHeight));
+        const ImVec2 panelPadding(5.0f, 6.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, panelPadding);
+        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, 2.0f));
+        SetNextRegion(sidebar);
         if (ImGui::Begin("回放信息##ReplayPanel", nullptr, fixedFlags))
         {
-            RecordWindowRegion(mInputRegions);
-            ImGui::TextUnformatted("回放战术面板");
+            mInputRegions.push_back(sidebar);
             if (snapshot.mIsPreview)
             {
                 ImGui::TextColored(ImVec4(0.96f, 0.71f, 0.35f, 1.0f), "布局预览 · 示例数据");
@@ -135,39 +146,34 @@ void ReplayHud::Draw(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayV
             {
                 ImGui::TextDisabled("当前没有活动回放");
             }
-            if (!snapshot.mReplayName.empty())
-            {
-                ImGui::TextWrapped("%s", snapshot.mReplayName.c_str());
-            }
             if (!snapshot.mMapName.empty())
             {
-                ImGui::TextDisabled("地图：%s", snapshot.mMapName.c_str());
+                ImGui::TextWrapped("%s", snapshot.mMapName.c_str());
             }
             ImGui::Separator();
             ImGui::TextUnformatted("玩家与经济");
             const float playerListHeight = std::clamp(panelHeight * 0.28f, 84.0f, 172.0f);
             detail::DrawPlayerList(snapshot, mSelectedHouseIndex, playerListHeight);
-            if (!snapshot.mHasPlayerVision)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.71f, 0.40f, 1.0f));
-                ImGui::TextWrapped("仅切换信息 · 地图视野未切换");
-                ImGui::PopStyleColor();
-            }
-            else
-            {
-                ImGui::TextDisabled("地图视野由宿主管理");
-            }
             ImGui::Separator();
 
             const viewer::PlayerSummary* selectedPlayer = FindPlayer(snapshot, mSelectedHouseIndex);
-            if (ImGui::BeginTabBar("回放详情##ReplayDetails"))
+            if (ImGui::BeginTabBar("回放详情##ReplayDetails", ImGuiTabBarFlags_FittingPolicyScroll))
             {
+                const ImGuiTabItemFlags statisticsFlags = mSelectPanelPending && mSelectedPanel == ReplayPanel::Statistics ?
+                    ImGuiTabItemFlags_SetSelected : 0;
                 const ImGuiTabItemFlags productionFlags = mSelectPanelPending && mSelectedPanel == ReplayPanel::Production ?
                     ImGuiTabItemFlags_SetSelected : 0;
                 const ImGuiTabItemFlags unitFlags = mSelectPanelPending && mSelectedPanel == ReplayPanel::Units ?
                     ImGuiTabItemFlags_SetSelected : 0;
                 const ImGuiTabItemFlags groupFlags = mSelectPanelPending && mSelectedPanel == ReplayPanel::Groups ?
                     ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("统计", nullptr, statisticsFlags))
+                {
+                    ImGui::BeginChild("统计内容", ImVec2(0.0f, 0.0f), false);
+                    detail::DrawPlayerStatistics(selectedPlayer, snapshot.mCompletedFrames);
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
                 if (ImGui::BeginTabItem("建造", nullptr, productionFlags))
                 {
                     ImGui::BeginChild("建造内容", ImVec2(0.0f, 0.0f), false);
@@ -182,7 +188,7 @@ void ReplayHud::Draw(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayV
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
-                if (ImGui::BeginTabItem("本地编队", nullptr, groupFlags))
+                if (ImGui::BeginTabItem("编队", nullptr, groupFlags))
                 {
                     ImGui::BeginChild("编队内容", ImVec2(0.0f, 0.0f), false);
                     detail::DrawRecordedGroups(snapshot);
@@ -194,16 +200,32 @@ void ReplayHud::Draw(const viewer::ReplayViewSnapshot& snapshot, viewer::ReplayV
             }
         }
         ImGui::End();
-        }
-
-    ImGui::SetNextWindowPos(ImVec2(origin.x + EDGE_GAP, origin.y + extent.y - FOOTER_HEIGHT - EDGE_GAP));
-    ImGui::SetNextWindowSize(ImVec2(extent.x - EDGE_GAP * 2.0f, FOOTER_HEIGHT));
-    if (ImGui::Begin("播放状态##ReplayFooter", nullptr, fixedFlags))
-    {
-        RecordWindowRegion(mInputRegions);
-        detail::DrawFrameControls(snapshot, exchange, mInputRegions);
+        ImGui::PopStyleVar(2);
     }
-    ImGui::End();
+
+    const auto footer = RoundInside(regions.mFooter, origin);
+    const float footerHeight = footer.mBottom - footer.mTop;
+    if (footer.mRight - footer.mLeft >= 210.0f && footerHeight >= 12.0f)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.0f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        SetNextRegion(footer);
+        if (ImGui::Begin("播放控制##ReplayFooter", nullptr,
+                fixedFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+        {
+            mInputRegions.push_back(footer);
+            ImGui::SetWindowFontScale(std::min(1.0f, (footerHeight - 2.0f) / ImGui::GetFont()->FontSize));
+            ImGui::SetCursorPosY(std::floor((footerHeight - ImGui::GetFrameHeight()) * 0.5f));
+            detail::DrawFrameControls(snapshot, exchange, mTimelineDragFrame);
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(5);
+    }
+    else
+        mTimelineDragFrame.reset();
     mVisibleRegions.insert(mVisibleRegions.end(), mInputRegions.begin(), mInputRegions.end());
     PopHudStyle();
 }
@@ -212,9 +234,10 @@ void ReplayHud::Reset()
 {
     mSessionId = 0;
     mSelectedHouseIndex = -1;
+    mTimelineDragFrame.reset();
     mInputRegions.clear();
     mVisibleRegions.clear();
-    mSelectedPanel = ReplayPanel::Production;
+    mSelectedPanel = ReplayPanel::Statistics;
     mSelectPanelPending = false;
 }
 

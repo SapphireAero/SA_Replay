@@ -29,10 +29,13 @@ namespace RAReplay.Client
 
         public string ReplayPath { get; private set; }
         public ReplayLaunchManifest Manifest { get; private set; }
+        public uint FrameCount { get; private set; }
+        public Guid RequestId { get; private set; }
 
-        internal static PlaybackSession Prepare(string root, ReplayArchive archive)
+        internal static PlaybackSession Prepare(string root, ReplayArchive archive, uint frameCount)
         {
             PlaybackSession session = new PlaybackSession(root, archive);
+            session.FrameCount = frameCount;
             try
             {
                 byte[] replayIni = MakeLocalEndpoints(archive.Manifest.SpawnIniBytes);
@@ -41,8 +44,9 @@ namespace RAReplay.Client
                 session.appliedMapHash = ReplayLaunchManifest.Hash(replayMap);
                 AtomicWrite(session.spawnIniPath, replayIni);
                 AtomicWrite(session.spawnMapPath, replayMap);
-                session.request = ReplayRuntimeRequest.Create(
-                    ReplayRuntimeRequest.Play, archive.Path, new byte[0]).Serialize();
+                ReplayRuntimeRequest launch = ReplayRuntimeRequest.Create(ReplayRuntimeRequest.Play, archive.Path, new byte[0]);
+                session.RequestId = new Guid(launch.RequestId);
+                session.request = launch.Serialize();
                 ReplayRuntimeRequest.Publish(root, session.request);
                 return session;
             }

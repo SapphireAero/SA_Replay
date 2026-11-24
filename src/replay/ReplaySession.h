@@ -38,6 +38,7 @@ public:
     void Stop();
 
     ReplayState GetState() const noexcept;
+    std::uint64_t GetCompletedPlaybackFrames() const noexcept { return mNextFrame; }
     const std::string& GetLastError() const noexcept;
 
 private:

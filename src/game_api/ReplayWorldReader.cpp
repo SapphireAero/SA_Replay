@@ -60,6 +60,80 @@ viewer::UnitCategory Category(AbstractType type)
     default: return viewer::UnitCategory::Other;
     }
 }
+
+ReplayPlayerIdentity ReadPlayerIdentity(const HouseClass& house) noexcept
+{
+    ReplayPlayerIdentity identity;
+    identity.mKnown = true;
+    identity.mIsHuman = house.IsHumanPlayer;
+    identity.mIsSpectator = house.IsObserver() ||
+        (ScenarioClass::Instance && house.IsInitiallyObserver());
+    if (!identity.mIsHuman)
+    {
+        std::copy_n(L"AI", 2, identity.mName);
+        return identity;
+    }
+
+    // Link the original session name to the house, rather than using the node's array position.
+    const auto& nodes = NodeNameType::Array;
+    if (nodes.Count > 0 && nodes.Count <= 64 && nodes.Items)
+    {
+        for (const auto* node : nodes)
+        {
+            if (node && node->HouseIndex == house.ArrayIndex && node->SpectatorFlag != 0xFFFFFFFFu && node->Name[0])
+            {
+                std::copy_n(node->Name, wcsnlen_s(node->Name, 20), identity.mName);
+                return identity;
+            }
+        }
+    }
+    std::copy_n(house.UIName, wcsnlen_s(house.UIName, 21), identity.mName);
+    return identity;
+}
+
+ReplayPlayerIdentity PlayerIdentity(const HouseClass& house, const ReplayPlayerIdentities& identities) noexcept
+{
+    if (house.ArrayIndex >= 0 && static_cast<std::size_t>(house.ArrayIndex) < identities.size())
+    {
+        const auto& identity = identities[house.ArrayIndex];
+        if (identity.mKnown) return identity;
+    }
+    return ReadPlayerIdentity(house);
+}
+
+viewer::PlayerBattleNumbers ReadBattleNumbers(const HouseClass& house, bool isHuman)
+{
+    viewer::PlayerBattleNumbers numbers;
+    numbers.mUnitKills = house.TotalKilledUnits;
+    numbers.mBuildingKills = house.TotalKilledBuildings;
+    if (house.ArrayIndex >= 0 && house.ArrayIndex < 20)
+    {
+        // Native score tables are indexed by attacker and victim, separately for units and buildings.
+        numbers.mUnitLosses = numbers.mBuildingLosses = 0;
+        for (const auto* attacker : HouseClass::Array)
+        {
+            if (!attacker)
+                continue;
+            numbers.mUnitLosses += attacker->KilledUnitsOfHouses[house.ArrayIndex];
+            numbers.mBuildingLosses += attacker->KilledBuildingsOfHouses[house.ArrayIndex];
+        }
+    }
+    numbers.mProduced = {house.FactoryProducedInfantryTypes.GetTotal(), house.FactoryProducedUnitTypes.GetTotal(),
+        house.FactoryProducedAircraftTypes.GetTotal(), house.FactoryProducedBuildingTypes.GetTotal()};
+    numbers.mOwned = {house.OwnedInfantryTypes.GetTotal(), house.OwnedUnitTypes.GetTotal(),
+        house.OwnedAircraftTypes.GetTotal(), house.OwnedBuildingTypes.GetTotal()};
+    numbers.mHarvested = house.HarvestedCredits;
+    numbers.mSpent = house.CreditsSpent;
+    // Available_Money also includes the value of stored ore.
+    numbers.mCash = house.Available_Money();
+    numbers.mPowerOutput = house.PowerOutput;
+    numbers.mPowerDrain = house.PowerDrain;
+    if (isHuman) numbers.mFlags |= viewer::Human;
+    if (house.Defeated) numbers.mFlags |= viewer::Defeated;
+    if (house.IsWinner) numbers.mFlags |= viewer::Winner;
+    if (house.IsLoser) numbers.mFlags |= viewer::Loser;
+    return numbers;
+}
 }
 
 struct ReplayWorldReader::Impl
@@ -80,7 +154,53 @@ const IconStats& ReplayWorldReader::GetIconStats() const noexcept
     return mImpl->mCameos.GetStats();
 }
 
-void ReplayWorldReader::Read(viewer::ReplayViewSnapshot& snapshot)
+ReplayPlayerIdentities ReadPlayerIdentities() noexcept
+{
+    ReplayPlayerIdentities identities{};
+    const auto& houses = HouseClass::Array;
+    if (houses.Count <= 0 || houses.Count > static_cast<int>(identities.size()) || !houses.Items)
+        return identities;
+    for (const auto* house : houses)
+    {
+        if (house && house->Type && !house->Type->MultiplayPassive &&
+            house->ArrayIndex >= 0 && static_cast<std::size_t>(house->ArrayIndex) < identities.size())
+            identities[house->ArrayIndex] = ReadPlayerIdentity(*house);
+    }
+    return identities;
+}
+
+BattleStats ReadBattleStats(const ReplayPlayerIdentities& identities) noexcept
+{
+    BattleStats result;
+    const auto& houses = HouseClass::Array;
+    if (houses.Count <= 0 || houses.Count > 64 || !houses.Items)
+        return result;
+
+    for (const auto* house : houses)
+    {
+        if (!house || !house->Type || house->Type->MultiplayPassive || house->ArrayIndex < 0 ||
+            house->ArrayIndex >= 64)
+            continue;
+        const auto identity = PlayerIdentity(*house, identities);
+        if (identity.mIsSpectator)
+            continue;
+
+        auto& row = result.mPlayers[result.mCount++];
+        row.mHouse = house->ArrayIndex;
+        std::copy_n(identity.mName, wcsnlen_s(identity.mName, 24), row.mName);
+        if (house->Type->UIName)
+            std::copy_n(house->Type->UIName, wcsnlen_s(house->Type->UIName, 47), row.mFaction);
+        row.mNumbers = ReadBattleNumbers(*house, identity.mIsHuman);
+        const auto& numbers = row.mNumbers;
+        row.mKills = numbers.mUnitKills + numbers.mBuildingKills;
+        row.mLosses = numbers.mUnitLosses < 0 ? -1 : numbers.mUnitLosses + numbers.mBuildingLosses;
+        const auto& produced = numbers.mProduced;
+        row.mProduced = produced.mInfantry + produced.mVehicles + produced.mAircraft + produced.mBuildings;
+    }
+    return result;
+}
+
+void ReplayWorldReader::Read(viewer::ReplayViewSnapshot& snapshot, const ReplayPlayerIdentities& identities)
 {
     mImpl->mCameos.BeginSample();
     snapshot.mFrameNumber = static_cast<std::uint32_t>(Unsorted::CurrentFrame);
@@ -88,19 +208,30 @@ void ReplayWorldReader::Read(viewer::ReplayViewSnapshot& snapshot)
     const auto& window = DSurface::WindowBounds;
     const auto& sidebar = SidebarClass::Instance;
     const int tabIndex = std::clamp(sidebar.ActiveTabIndex, 0, 3);
-    int contentTop = sidebar.Tabs[tabIndex].Location.Y - window.Y;
-    const bool hasBuildBoundary = contentTop > 0 && contentTop < window.Height;
-    // 149C 是 Sidebar surface 内的小地图内容框；Strip 起点同时保护其边框及上侧栏。
-    const auto& radar = sidebar.unknown_rect_149C;
-    const auto& sidebarBounds = DSurface::SidebarBounds;
-    if (radar.Height > 0 && radar.Height <= window.Height)
+    if (window.Width > 0 && window.Height > 0)
     {
-        const auto radarBottom = static_cast<std::int64_t>(sidebarBounds.Y) + radar.Y + radar.Height - window.Y;
-        if (radarBottom > 0 && radarBottom < window.Height)
-            contentTop = std::max(contentTop, static_cast<int>(radarBottom));
+        viewer::NativeUiLayout layout{window.Width, window.Height, {}, {}};
+        const auto& view = DSurface::ViewBounds;
+        const int viewBottom = view.Y + view.Height - window.Y;
+        if (view.Width > 0 && view.Height > 0 && viewBottom > 0 && viewBottom < window.Height)
+            layout.mFooter = {view.X - window.X, viewBottom, view.X + view.Width - window.X, window.Height};
+
+        const auto& bounds = DSurface::SidebarBounds;
+        int contentTop = sidebar.Tabs[tabIndex].Location.Y - window.Y;
+        if (bounds.Width > 0 && bounds.Height > 0 && contentTop > 0 && contentTop < window.Height)
+        {
+            const auto& radar = sidebar.unknown_rect_149C;
+            const int sidebarTop = bounds.Y - window.Y;
+            const int sidebarBottom = sidebarTop + bounds.Height;
+            // 雷达的坐标相对 Sidebar surface，建造条的坐标相对游戏窗口。
+            const auto radarBottom = static_cast<std::int64_t>(sidebarTop) + radar.Y + radar.Height;
+            if (radar.Height > 0 && radarBottom > sidebarTop && radarBottom <= sidebarBottom)
+                contentTop = std::max(contentTop, static_cast<int>(radarBottom));
+            layout.mSidebar = {bounds.X - window.X, std::max(contentTop, sidebarTop),
+                bounds.X + bounds.Width - window.X, sidebarBottom};
+        }
+        snapshot.mNativeUiLayout = layout;
     }
-    if (hasBuildBoundary && window.Width > 0 && window.Height > 0 && contentTop > 0 && contentTop < window.Height)
-        snapshot.mNativeUiLayout = viewer::NativeUiLayout{window.Width, window.Height, contentTop};
     snapshot.mWasNetworkGame = SessionClass::Instance.GameMode == GameMode::LAN ||
         SessionClass::Instance.GameMode == GameMode::Internet;
     if (ScenarioClass::Instance)
@@ -119,20 +250,24 @@ void ReplayWorldReader::Read(viewer::ReplayViewSnapshot& snapshot)
         auto* house = houses.Items[index];
         if (!house || !house->Type || house->Type->MultiplayPassive)
             continue;
+        const auto identity = PlayerIdentity(*house, identities);
+        if (identity.mIsSpectator)
+            continue;
         viewer::PlayerSummary player;
         player.mHouseIndex = house->ArrayIndex;
-        player.mName = Utf8(house->UIName, 21);
+        player.mName = Utf8(identity.mName, 24);
         if (player.mName.empty())
-            player.mName = "玩家 " + std::to_string(house->ArrayIndex + 1);
+            player.mName = "未识别玩家";
         player.mFaction = TypeName(house->Type);
         player.mColorRgb = (static_cast<std::uint32_t>(house->Color.R) << 16) |
             (static_cast<std::uint32_t>(house->Color.G) << 8) | house->Color.B;
-        player.mIsHuman = house->IsHumanPlayer;
+        player.mIsHuman = identity.mIsHuman;
         player.mDefeated = house->Defeated;
-        // 此 const 查询包含可用矿石价值；直接读取 Balance 会少算可花费资金。
-        player.mCredits = house->Available_Money();
-        player.mPowerOutput = house->PowerOutput;
-        player.mPowerDrain = house->PowerDrain;
+        player.mBattleNumbers = ReadBattleNumbers(*house, identity.mIsHuman);
+        const auto& numbers = *player.mBattleNumbers;
+        player.mCredits = numbers.mCash;
+        player.mPowerOutput = numbers.mPowerOutput;
+        player.mPowerDrain = numbers.mPowerDrain;
         playerIndices.emplace(house, snapshot.mPlayers.size());
         snapshot.mPlayers.push_back(std::move(player));
     }

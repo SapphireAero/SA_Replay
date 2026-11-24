@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../viewer/ReplayViewModel.h"
+#include "ReplayBattleStats.h"
 
 #include <cstdint>
 #include <memory>
@@ -26,7 +27,7 @@ public:
     ~ReplayWorldReader();
     ReplayWorldReader(const ReplayWorldReader&) = delete;
     ReplayWorldReader& operator=(const ReplayWorldReader&) = delete;
-    void Read(viewer::ReplayViewSnapshot& snapshot);
+    void Read(viewer::ReplayViewSnapshot& snapshot, const ReplayPlayerIdentities& identities);
     void Reset() noexcept;
     const IconStats& GetIconStats() const noexcept;
 

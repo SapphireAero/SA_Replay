@@ -358,12 +358,12 @@ private:
     void DrawNativeRadarPlaceholder()
     {
         const ImVec2 size = ImGui::GetIO().DisplaySize;
-        const auto bottom = rareplay::ui::GetSidebarPanelTop(mSnapshot->mNativeUiLayout,
-            size.x, size.y, {});
-        if (!bottom || *bottom < 75.0f)
+        const auto sidebar = rareplay::ui::GetReplayHudRegions(mSnapshot->mNativeUiLayout,
+            size.x, size.y, {}).mSidebar;
+        if (sidebar.mTop < 75.0f || sidebar.mRight - sidebar.mLeft < 50.0f)
             return;
-        const ImVec2 topLeft(size.x - 190.0f, 14.0f);
-        const ImVec2 bottomRight(size.x - 14.0f, *bottom - 8.0f);
+        const ImVec2 topLeft(sidebar.mLeft + 4.0f, 14.0f);
+        const ImVec2 bottomRight(sidebar.mRight - 4.0f, sidebar.mTop - 8.0f);
         ImDrawList* background = ImGui::GetBackgroundDrawList();
         background->AddRectFilled(topLeft, bottomRight, IM_COL32(19, 29, 25, 255), 5.0f);
         background->AddRect(topLeft, bottomRight, IM_COL32(87, 114, 96, 255), 5.0f);

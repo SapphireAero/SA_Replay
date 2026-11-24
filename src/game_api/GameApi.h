@@ -4,6 +4,7 @@
 #include "PlayerInputEffects.h"
 #include "ViewerPlaybackSpeed.h"
 
+#include <array>
 
 namespace rareplay::game_api
 {
@@ -30,6 +31,9 @@ public:
     bool TrySetViewerPlaybackSpeed(int setting) noexcept;
     bool TryGetViewerPlaybackSpeed(int& outSetting) const noexcept;
     bool CanControlViewerPlaybackSpeed() const noexcept;
+    bool IsNetworkGame() const noexcept;
+    void RenderPausedPlayback() const;
+    const std::array<std::uint32_t, 64>& GetPlaybackCommandCounts() const noexcept { return mPlaybackCommands; }
     static void InvokeNativeFrameParser();
     static bool InvokeNativePreworldWait();
     /** 仅在已验证目标的 InitRandom 选种后、任一 RNG 初始化前的游戏线程调用；不要求世界就绪。 */
@@ -42,6 +46,7 @@ private:
     ViewerPlaybackSpeed mViewerPlaybackSpeed;
     std::string mPlayerInputEffectsError;
     std::uint32_t mActiveFrame = 0;
+    std::array<std::uint32_t, 64> mPlaybackCommands{};
     bool mIsFrameActive = false;
     bool mHasNativeChecksum = false;
 };

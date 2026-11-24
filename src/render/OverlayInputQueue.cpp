@@ -77,6 +77,8 @@ bool OverlayInputQueue::RouteMessage(HWND window, UINT message, WPARAM wParam, L
 
     if (message == WM_CAPTURECHANGED)
     {
+        if (mCapturedButtons != 0)
+            RequestFocusReset();
         mCapturedButtons = 0;
         mOwnsWindowCapture = false;
         return false;

@@ -29,7 +29,6 @@ void DrawUnitTile(const viewer::UnitSummary& unit, const ReplayHud::IconResolver
     const ImVec2 tileSize(tileWidth, 94.0f);
     ImGui::InvisibleButton("单位卡", tileSize);
     const char* name = unit.mName.empty() ? unit.mTypeId.c_str() : unit.mName.c_str();
-    ImGui::SetItemTooltip("%s · %u", name, unit.mCount);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->AddRectFilled(start, ImVec2(start.x + tileWidth, start.y + tileSize.y),
                             IM_COL32(39, 47, 41, 235), 4.0f);
@@ -85,7 +84,6 @@ UiRect DrawIcon(const std::shared_ptr<const viewer::IconImage>& icon,
     drawList->AddText(ImVec2(start.x + (size.x - textSize.x) * 0.5f,
                              start.y + (size.y - textSize.y) * 0.5f),
                       IM_COL32(195, 199, 187, 255), placeholder);
-    ImGui::SetItemTooltip("图标缺失或尚未载入");
     return {start.x, start.y, start.x + size.x, start.y + size.y};
 }
 

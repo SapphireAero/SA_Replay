@@ -10,7 +10,8 @@ void OverlayDiagnosticsReporter::Report(bool force) noexcept
     const auto info = hooks::GetReplayOverlayDiagnostics();
     const auto now = std::chrono::steady_clock::now();
     const bool changed = info.mObservedBackend != mLastBackend || info.mStatus != mLastStatus;
-    if (!force && mHasReported && !changed && now < mNextReport)
+    if (!force && mHasReported && !changed &&
+        (now < mNextReport || info.mObservedBackend == hooks::ReplayGraphicsBackend::Unknown))
         return;
     mNextReport = now + std::chrono::seconds(info.mRenderedFrames > 0 ? 30 : 3);
     mHasReported = true;
