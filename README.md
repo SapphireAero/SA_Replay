@@ -25,4 +25,4 @@ dotnet build integrations\csharp\ReplayCenter\ReplayCenter.csproj -c Release
 
 ## 许可证
 
-原创文件 `integrations/csharp/ReplayCenter/SeekTrackBar.cs` 和 `integrations/csharp/ReplayCenter/ReplayFileName.cs` 采用 [MIT 许可证](LICENSE-MIT)。上游代码保留原有版权声明，第三方依赖及许可见 [third_party/README.md](third_party/README.md)。
+SA_Replay 在上游基础上自行编写的新增及修改部分采用 [MIT 许可证](LICENSE-MIT)。上游代码保留原有版权声明。第三方依赖及其许可见 [third_party/README.md](third_party/README.md)。
