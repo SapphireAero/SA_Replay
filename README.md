@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Modified by SA_Replay contributors. First published with these changes on 2026-11-24. -->
+
 # SA_Replay
 
 SA_Replay 是心灵终结（Mental Omega 3.3.6）的独立回放工具，可与原版启动器共存。支持自动录制、暂停、时间定位、1× 至 16× 播放和对局战报。
@@ -25,4 +28,10 @@ dotnet build integrations\csharp\ReplayCenter\ReplayCenter.csproj -c Release
 
 ## 许可证
 
-SA_Replay 在上游基础上自行编写的新增及修改部分采用 [MIT 许可证](LICENSE-MIT)。上游代码保留原有版权声明。第三方依赖及其许可见 [third_party/README.md](third_party/README.md)。
+SA_Replay 派生自 [RAReplayPlugin](https://github.com/WLChara/RAReplayPlugin)，基于上游提交 [`364980b`](https://github.com/WLChara/RAReplayPlugin/commit/364980be1368ee270bb3f08570a5625e63c67c16)。
+
+Copyright (C) 2026 WLChara
+
+SA_Replay 整体依据 GNU 通用公共许可证第 3 版（`GPL-3.0-only`）发布，全文见 [LICENSE](LICENSE)。第三方组件保留各自的版权声明及许可，见 [third_party/README.md](third_party/README.md)。
+
+此前针对「新增及修改部分」的概括性 MIT 声明已撤回。分发编译产物时，请在下载处提供可免费取得的对应完整源码及构建脚本。

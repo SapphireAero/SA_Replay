@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+
 # SA_Replay
 
 SA_Replay 是为 Mental Omega 3.3.6 和上游 RAReplay V2 插件配套的独立 Windows 回放客户端，需要 .NET Framework 4.8。
@@ -37,3 +39,7 @@ SA_Replay 是为 Mental Omega 3.3.6 和上游 RAReplay V2 插件配套的独立 
     dotnet build integrations\csharp\ReplayCenter\ReplayCenter.csproj -c Release
 
 从 integrations\csharp\ReplayCenter\bin\Release\net48 取 SA_Replay.exe、RAReplay.Client.dll 和 gamemd.exe.manifest，再从 build\v2\Release 取 RAReplayPlugin.dll。
+
+## 许可证
+
+SA_Replay 整体按 GPL-3.0-only 发布。上游来源、版权和第三方许可说明见[仓库 README](../../../README.md#许可证)，许可证全文见 [LICENSE](../../../LICENSE)。

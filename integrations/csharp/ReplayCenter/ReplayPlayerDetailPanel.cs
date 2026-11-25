@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;

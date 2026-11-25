@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Modified by SA_Replay contributors. First published with these changes on 2026-11-24.
+
 #pragma once
 
 #include "ReplayViewModel.h"
